@@ -1,0 +1,44 @@
+{
+  "name": "stare-cli",
+  "version": "0.1.0",
+  "description": "Attach to CI builds and stream logs locally",
+  "license": "MIT",
+  "type": "module",
+  "homepage": "https://github.com/javascripter/stare#readme",
+  "bugs": {
+    "url": "https://github.com/javascripter/stare/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/javascripter/stare.git"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "bin": {
+    "stare": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx --no-cache src/cli.ts",
+    "test": "vitest run",
+    "check": "npm run build && npm run test",
+    "prepublishOnly": "npm run check"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "commander": "^14.0.1",
+    "picocolors": "^1.1.1",
+    "playwright-core": "^1.54.2"
+  },
+  "devDependencies": {
+    "@types/node": "^24.5.2",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
+  }
+}
