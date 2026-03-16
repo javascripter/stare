@@ -27,7 +27,7 @@ export const easPlatform: WatchPlatform = {
     build
       .command("view")
       .description("View and follow Expo EAS build logs.")
-      .argument("<build-id-or-url>", "EAS build ID or Expo build URL")
+      .argument("<build-id-or-url...>", "One or more EAS build IDs or Expo build URLs")
       .option(
         "--poll-interval-ms <ms>",
         "Build polling interval in milliseconds",
@@ -40,10 +40,11 @@ export const easPlatform: WatchPlatform = {
 Examples:
   $ stare eas build view 11111111-2222-4333-8444-555555555555
   $ stare eas build view https://expo.dev/accounts/example-owner/projects/example-app/builds/11111111-2222-4333-8444-555555555555
+  $ stare eas build view 11111111-2222-4333-8444-555555555555 66666666-7777-4888-8999-aaaaaaaaaaaa
 `,
       )
-      .action(async (buildSelector: string, options: EasBuildViewOptions) => {
-        await watchEasBuild(buildSelector, options);
+      .action(async (buildSelectors: string[], options: EasBuildViewOptions) => {
+        await watchEasBuild(buildSelectors, options);
       });
   },
 };

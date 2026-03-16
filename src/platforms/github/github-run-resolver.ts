@@ -25,7 +25,7 @@ export interface GitHubResolvedRuns {
 export interface GitHubResolveOptions {
   selector?: string;
   repo?: string;
-  runId?: string;
+  runId?: string[];
   token?: string;
   workflow?: string;
 }
@@ -59,19 +59,16 @@ export async function resolveGitHubRuns(
   const parsedUrl = parseGitHubActionsUrl(options.selector);
   const selectorRunId =
     parsedUrl?.runId ?? (options.selector && /^\d+$/u.test(options.selector) ? options.selector : undefined);
-  if (options.runId && options.selector) {
+  const explicitRunIds = options.runId ?? [];
+
+  if (explicitRunIds.length > 0 && options.selector) {
     throw new Error(
       "Received both a positional selector and --run-id. Provide only one run selector.",
     );
   }
-  if (selectorRunId && options.workflow) {
+  if ((selectorRunId || explicitRunIds.length > 0) && options.workflow) {
     throw new Error(
       "Received both a run selector and --workflow. Use the run selector by itself, or remove it and select the workflow explicitly.",
-    );
-  }
-  if (options.runId && options.workflow) {
-    throw new Error(
-      "Received both --run-id and --workflow. Use --run-id by itself, or remove --run-id and select the workflow explicitly.",
     );
   }
 
@@ -87,12 +84,19 @@ export async function resolveGitHubRuns(
   const api = new GitHubApiClient(repo, token);
   await api.getRepository();
 
-  const explicitRunId = options.runId ?? selectorRunId;
-  if (explicitRunId) {
+  const selectedRunIds = explicitRunIds.length > 0
+    ? explicitRunIds
+    : selectorRunId
+      ? [selectorRunId]
+      : [];
+
+  if (selectedRunIds.length > 0) {
     return {
       api,
       repo,
-      runs: [await getRunWithFriendlyErrors(api, explicitRunId, repo)],
+      runs: await Promise.all(
+        selectedRunIds.map((runId) => getRunWithFriendlyErrors(api, runId, repo)),
+      ),
     };
   }
 

@@ -1,5 +1,6 @@
 import { setTimeout as sleep } from "node:timers/promises";
 import pc from "picocolors";
+import { AlreadyReportedError } from "../../core/error.js";
 import type { OutputSink } from "../../core/output.js";
 import { TerminalOutput as DefaultTerminalOutput } from "../../core/output.js";
 import { ExpoApiClient, type EasBuild, type EasBuildApi } from "./eas-api.js";
@@ -23,6 +24,11 @@ interface EasLogEntry {
   phase?: string;
   msg?: string;
   source?: string;
+}
+
+interface CompletedBuildSummary {
+  label: string;
+  status: string;
 }
 
 const EAS_PHASE_LABELS: Record<string, string> = {
@@ -75,13 +81,59 @@ const EAS_PHASE_LABELS: Record<string, string> = {
 };
 
 export async function watchEasBuild(
-  selectorInput: string,
+  selectorInput: string | readonly string[],
   options: EasBuildViewOptions,
   output: OutputSink = new DefaultTerminalOutput(),
   api?: EasBuildApi,
 ): Promise<void> {
-  const selector = resolveEasBuildSelector(selectorInput);
+  const selectors = (Array.isArray(selectorInput) ? selectorInput : [selectorInput]).map(
+    resolveEasBuildSelector,
+  );
   const easApi = api ?? (await ExpoApiClient.fromEnvironment());
+
+  const results = await Promise.allSettled(
+    selectors.map((selector) =>
+      watchResolvedBuild(selector, selectors.length > 1, options, output, easApi),
+    ),
+  );
+
+  const completedBuilds = results
+    .filter((result): result is PromiseFulfilledResult<EasBuild> => result.status === "fulfilled")
+    .map((result) => result.value);
+  printCompletedBuildFooter(output, completedBuilds, selectors.length > 1);
+
+  const watcherFailures = results
+    .filter((result): result is PromiseRejectedResult => result.status === "rejected")
+    .map((result) => (result.reason instanceof Error ? result.reason.message : String(result.reason)));
+
+  if (watcherFailures.length === 1) {
+    throw new Error(watcherFailures[0]);
+  }
+
+  if (watcherFailures.length > 1) {
+    throw new Error(`One or more EAS builds failed:\n- ${watcherFailures.join("\n- ")}`);
+  }
+
+  const buildFailures = completedBuilds
+    .filter((build) => build.status === "ERRORED" || build.status === "CANCELED")
+    .map((build) => formatBuildFailure(build, selectors.length > 1));
+
+  if (buildFailures.length === 1) {
+    throw new AlreadyReportedError(buildFailures[0]);
+  }
+
+  if (buildFailures.length > 1) {
+    throw new AlreadyReportedError(`One or more EAS builds failed:\n- ${buildFailures.join("\n- ")}`);
+  }
+}
+
+async function watchResolvedBuild(
+  selector: ReturnType<typeof resolveEasBuildSelector>,
+  includeBuildIdInLabel: boolean,
+  options: EasBuildViewOptions,
+  output: OutputSink,
+  easApi: EasBuildApi,
+): Promise<EasBuild> {
 
   const observedLogFiles = new Map<string, ObservedLogFile>();
   const buildLogState: EasBuildLogState = {};
@@ -90,6 +142,7 @@ export async function watchEasBuild(
 
   while (true) {
     const build = await easApi.getBuild(selector.buildId);
+    const buildLabel = formatBuildLabel(build, includeBuildIdInLabel);
 
     if (!printedHeader) {
       printBuildHeader(build, selector.buildUrl, output);
@@ -97,17 +150,35 @@ export async function watchEasBuild(
     }
 
     if (build.status !== lastStatus) {
-      output.status(`Build status: ${formatToken(build.status)}.`);
+      output.status(
+        includeBuildIdInLabel
+          ? `${buildLabel} status: ${formatToken(build.status)}.`
+          : `Build status: ${formatToken(build.status)}.`,
+      );
       lastStatus = build.status;
     }
 
-    await reconcileLogFiles(build, observedLogFiles, buildLogState, easApi, output);
+    await reconcileLogFiles(
+      build,
+      observedLogFiles,
+      buildLogState,
+      easApi,
+      output,
+      includeBuildIdInLabel,
+    );
 
     if (isTerminalStatus(build.status)) {
       const finalBuild = await easApi.getBuild(selector.buildId);
-      await reconcileLogFiles(finalBuild, observedLogFiles, buildLogState, easApi, output);
-      finishBuild(finalBuild, output);
-      return;
+      await reconcileLogFiles(
+        finalBuild,
+        observedLogFiles,
+        buildLogState,
+        easApi,
+        output,
+        includeBuildIdInLabel,
+      );
+      finishBuild(finalBuild, output, includeBuildIdInLabel);
+      return finalBuild;
     }
 
     await sleep(options.pollIntervalMs);
@@ -120,8 +191,9 @@ async function reconcileLogFiles(
   buildLogState: EasBuildLogState,
   api: EasBuildApi,
   output: OutputSink,
+  includeBuildIdInLabel: boolean,
 ): Promise<void> {
-  const buildLabel = formatBuildLabel(build);
+  const buildLabel = formatBuildLabel(build, includeBuildIdInLabel);
 
   for (const logFileUrl of build.logFiles) {
     const logFileKey = getLogFileKey(logFileUrl);
@@ -237,8 +309,13 @@ function printBuildHeader(build: EasBuild, buildUrl: string | undefined, output:
   }
 }
 
-function finishBuild(build: EasBuild, output: OutputSink): void {
-  output.status(`Build ${formatToken(build.status)}.`);
+function finishBuild(build: EasBuild, output: OutputSink, includeBuildIdInLabel: boolean): void {
+  const buildLabel = formatBuildLabel(build, includeBuildIdInLabel);
+  output.status(
+    includeBuildIdInLabel
+      ? `${buildLabel} ${formatToken(build.status)}.`
+      : `Build ${formatToken(build.status)}.`,
+  );
 
   const artifactLines = [
     build.artifacts?.applicationArchiveUrl
@@ -253,16 +330,7 @@ function finishBuild(build: EasBuild, output: OutputSink): void {
   ].filter((value): value is string => Boolean(value));
 
   for (const line of artifactLines) {
-    output.status(line);
-  }
-
-  if (build.status === "ERRORED") {
-    const details = [build.error?.message, build.error?.docsUrl].filter(Boolean).join(" ");
-    throw new Error(details || `EAS build ${build.id} failed.`);
-  }
-
-  if (build.status === "CANCELED") {
-    throw new Error(`EAS build ${build.id} was canceled.`);
+    output.status(includeBuildIdInLabel ? `${buildLabel} ${line}` : line);
   }
 }
 
@@ -284,14 +352,63 @@ function formatPhaseLabel(phase: string): string {
   return EAS_PHASE_LABELS[phase] ?? formatToken(phase);
 }
 
-function formatBuildLabel(build: EasBuild): string {
-  switch (build.platform) {
+function printCompletedBuildFooter(
+  output: OutputSink,
+  builds: readonly EasBuild[],
+  includeBuildIdInLabel: boolean,
+): void {
+  if (builds.length === 0) {
+    return;
+  }
+
+  output.status(`Summary: ${builds.length} build${builds.length === 1 ? "" : "s"}`);
+  for (const summary of builds
+    .map((build) => ({
+      label: formatBuildLabel(build, includeBuildIdInLabel),
+      status: build.status,
+    }))
+    .sort((left, right) => left.label.localeCompare(right.label))) {
+    output.status(`  ${formatBuildStatusSymbol(summary.status)} ${summary.label} ${formatToken(summary.status)}`);
+  }
+}
+
+function formatBuildFailure(build: EasBuild, includeBuildIdInLabel: boolean): string {
+  const label = formatBuildLabel(build, includeBuildIdInLabel);
+
+  if (build.status === "ERRORED") {
+    const details = [build.error?.message, build.error?.docsUrl].filter(Boolean).join(" ");
+    return details ? `${label}: ${details}` : `${label} failed.`;
+  }
+
+  if (build.status === "CANCELED") {
+    return `${label} was canceled.`;
+  }
+
+  return `${label} ended with ${formatToken(build.status)}.`;
+}
+
+function formatBuildStatusSymbol(status: string): string {
+  return status === "FINISHED" ? "✓" : "✗";
+}
+
+function formatBuildLabel(build: EasBuild, includeBuildId = false): string {
+  const platformLabel = formatPlatformLabel(build.platform);
+
+  if (!includeBuildId) {
+    return platformLabel;
+  }
+
+  return `${platformLabel} ${build.id.slice(0, 8)}`;
+}
+
+function formatPlatformLabel(platform: string): string {
+  switch (platform) {
     case "IOS":
       return "iOS";
     case "ANDROID":
       return "Android";
     default:
-      return formatToken(build.platform);
+      return formatToken(platform);
   }
 }
 

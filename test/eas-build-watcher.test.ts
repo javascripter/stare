@@ -1,5 +1,6 @@
 import { stripVTControlCharacters } from "node:util";
 import { describe, expect, it, vi } from "vitest";
+import { AlreadyReportedError } from "../src/core/error.js";
 import type { EasBuild } from "../src/platforms/eas/eas-api.js";
 import {
   getLogFileKey,
@@ -158,6 +159,8 @@ describe("watchEasBuild", () => {
     expect(output.statuses).toContain(`Logs: ${BUILD_URL}`);
     expect(output.statuses).toContain("Build Finished.");
     expect(output.statuses).toContain(`Application archive: ${APPLICATION_ARCHIVE_URL}`);
+    expect(output.statuses).toContain("Summary: 1 build");
+    expect(output.statuses).toContain("  ✓ Android Finished");
   });
 
   it("parses raw lines and strips signatures from log file keys", () => {
@@ -178,6 +181,121 @@ describe("watchEasBuild", () => {
         "https://logs.example.test/production/build-id/run-gradlew.txt?X-Goog-Signature=abc",
       ),
     ).toBe("/production/build-id/run-gradlew.txt");
+  });
+
+  it("watches multiple explicit builds and labels same-platform output separately", async () => {
+    const secondBuildId = "66666666-7777-4888-8999-aaaaaaaaaaaa";
+    const firstLog = logUrl(BUILD_ID, "queue.txt", "first");
+    const secondLog = logUrl(secondBuildId, "queue.txt", "second");
+    const getBuild = vi.fn<(buildId: string) => Promise<EasBuild>>().mockImplementation(async (buildId) => {
+      if (buildId === BUILD_ID) {
+        return build({
+          id: BUILD_ID,
+          status: "FINISHED",
+          logFiles: [firstLog],
+          artifacts: {
+            applicationArchiveUrl: APPLICATION_ARCHIVE_URL,
+          },
+        });
+      }
+
+      if (buildId === secondBuildId) {
+        return build({
+          id: secondBuildId,
+          status: "FINISHED",
+          logFiles: [secondLog],
+          artifacts: {
+            applicationArchiveUrl: "https://downloads.example.test/app-release-2.apk",
+          },
+        });
+      }
+
+      throw new Error(`Unexpected build: ${buildId}`);
+    });
+    const getLogFile = vi.fn<(url: string) => Promise<string>>().mockImplementation(async (url) => {
+      if (url === firstLog) {
+        return [
+          entry({ phase: "QUEUE", marker: "START_PHASE" }),
+          entry({ phase: "QUEUE", msg: "First build" }),
+          entry({ phase: "QUEUE", marker: "END_PHASE" }),
+        ].join("\n");
+      }
+
+      if (url === secondLog) {
+        return [
+          entry({ phase: "QUEUE", marker: "START_PHASE" }),
+          entry({ phase: "QUEUE", msg: "Second build" }),
+          entry({ phase: "QUEUE", marker: "END_PHASE" }),
+        ].join("\n");
+      }
+
+      throw new Error(`Unexpected log URL: ${url}`);
+    });
+
+    const output = createCapturedOutput();
+
+    await watchEasBuild(
+      [BUILD_ID, secondBuildId],
+      {
+        pollIntervalMs: 0,
+      },
+      output,
+      { getBuild, getLogFile },
+    );
+
+    expect(output.lines).toEqual(
+      expect.arrayContaining([
+        {
+          label: "Android 11111111",
+          lines: ["Waiting to start", "  First build"],
+        },
+        {
+          label: "Android 66666666",
+          lines: ["Waiting to start", "  Second build"],
+        },
+      ]),
+    );
+    expect(output.statuses).toContain("Summary: 2 builds");
+    expect(output.statuses).toContain("  ✓ Android 11111111 Finished");
+    expect(output.statuses).toContain("  ✓ Android 66666666 Finished");
+  });
+
+  it("prints the summary before failing and marks build failures as already reported", async () => {
+    const failedLog = logUrl(BUILD_ID, "run-gradlew.txt", "failed");
+    const getBuild = vi
+      .fn<(buildId: string) => Promise<EasBuild>>()
+      .mockResolvedValue(
+        build({
+          id: BUILD_ID,
+          status: "ERRORED",
+          logFiles: [failedLog],
+          error: {
+            message: "Build failed remotely.",
+          },
+        }),
+      );
+    const getLogFile = vi.fn<(url: string) => Promise<string>>().mockResolvedValue(
+      [
+        entry({ phase: "FAIL_BUILD", marker: "START_PHASE" }),
+        entry({ phase: "FAIL_BUILD", msg: "Build failed remotely." }),
+      ].join("\n"),
+    );
+
+    const output = createCapturedOutput();
+
+    await expect(
+      watchEasBuild(
+        BUILD_URL,
+        {
+          pollIntervalMs: 0,
+        },
+        output,
+        { getBuild, getLogFile },
+      ),
+    ).rejects.toBeInstanceOf(AlreadyReportedError);
+
+    expect(output.statuses).toContain("Summary: 1 build");
+    expect(output.statuses).toContain("  ✗ Android Errored");
   });
 });
 

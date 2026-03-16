@@ -21,7 +21,7 @@ interface GitHubRunViewOptions extends GitHubBrowserCommandOptions {
   pollIntervalMs: number;
   attachTimeoutMs: number;
   idleShutdownMs: number;
-  runId?: string;
+  runId: string[];
   workflow?: string;
 }
 
@@ -130,7 +130,7 @@ Selection rules:
           {
             selector,
             repo: options.repo,
-            runId: options.runId,
+            runId: options.runId.length > 0 ? options.runId : undefined,
             token: options.token,
             workflow: options.workflow,
           },
@@ -144,7 +144,7 @@ Selection rules:
 function addRunViewOptions(command: Command): Command {
   return command
     .option("-R, --repo <owner/repo>", "GitHub repository to stare at")
-    .option("--run-id <run-id>", "GitHub Actions run ID")
+    .option("--run-id <run-id>", "GitHub Actions run ID", collectValues, [])
     .option(
       "--workflow <workflow>",
       "Workflow name, file name, or workflow path. Defaults to the current branch when possible.",
@@ -190,6 +190,11 @@ function addRunViewOptions(command: Command): Command {
       parseNumberOption,
       5_000,
     );
+}
+
+function collectValues(value: string, previous: string[]): string[] {
+  previous.push(value);
+  return previous;
 }
 
 function parseNumberOption(value: string): number {

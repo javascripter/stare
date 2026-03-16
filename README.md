@@ -75,6 +75,7 @@ stare gh run view
 stare gh run view <commit-sha>
 stare gh run view <actions-url>
 stare gh run view --run-id <run-id>
+stare gh run view --run-id <run-id> --run-id <run-id>
 ```
 
 `stare gh run view` defaults to the current repo and the latest eligible run for each workflow on `HEAD`.
@@ -84,6 +85,7 @@ Common cases:
 - no argument: watch the latest eligible runs for the current `HEAD`
 - commit SHA: watch the matching runs for that commit
 - Actions URL or `--run-id`: watch a specific run directly
+- repeated `--run-id`: watch multiple explicit runs together
 
 For authentication:
 
@@ -102,6 +104,7 @@ stare gh run view --run-id 123456789 --repo owner/repo
 ```bash
 stare eas build view <build-id>
 stare eas build view <expo-build-url>
+stare eas build view <build-id-or-url> <build-id-or-url>
 ```
 
 `stare` reads Expo auth from `~/.expo/state.json`, so log in first with `eas login`.
