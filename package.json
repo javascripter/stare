@@ -18,7 +18,7 @@
     "LICENSE"
   ],
   "bin": {
-    "stare": "./dist/cli.js"
+    "stare": "dist/cli.js"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
