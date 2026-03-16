@@ -162,6 +162,35 @@ describe("resolveGitHubRuns", () => {
     expect(resolved.runs.map((run) => run.id)).toEqual([99]);
   });
 
+  it("resolves multiple explicit run ids in the provided order", async () => {
+    apiMocks.getRun
+      .mockResolvedValueOnce(
+        buildRun({
+          id: 41,
+          workflowId: 20,
+          createdAt: "2026-01-05T00:00:00Z",
+        }),
+      )
+      .mockResolvedValueOnce(
+        buildRun({
+          id: 42,
+          workflowId: 21,
+          name: "Lint",
+          path: ".github/workflows/lint.yml",
+          createdAt: "2026-01-06T00:00:00Z",
+        }),
+      );
+
+    const resolved = await resolveGitHubRuns(
+      { runId: ["41", "42"] },
+      createOutputSink(),
+    );
+
+    expect(apiMocks.getRun).toHaveBeenNthCalledWith(1, "41");
+    expect(apiMocks.getRun).toHaveBeenNthCalledWith(2, "42");
+    expect(resolved.runs.map((run) => run.id)).toEqual([41, 42]);
+  });
+
   it("fails early when GitHub authentication could not be resolved", async () => {
     authMocks.resolveGitHubToken.mockRejectedValue(
       new Error("GitHub authentication is required. Run `gh auth login`."),

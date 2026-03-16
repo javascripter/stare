@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { Command } from "commander";
+import { AlreadyReportedError } from "./core/error.js";
 import { registerPlatforms } from "./platforms/index.js";
 
 async function main(): Promise<void> {
@@ -17,6 +18,11 @@ async function main(): Promise<void> {
 }
 
 main().catch((error: unknown) => {
+  if (error instanceof AlreadyReportedError) {
+    process.exitCode = error.exitCode;
+    return;
+  }
+
   const message = error instanceof Error ? error.message : String(error);
   process.stderr.write(`[stare] ${message}\n`);
   process.exitCode = 1;

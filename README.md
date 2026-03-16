@@ -11,7 +11,7 @@ Supported platforms:
 
 ```bash
 git push
-stare gh run view
+stare
 ```
 
 ![stare demo](demo/stare-gh-run-view.gif)
@@ -56,13 +56,13 @@ GitHub Actions:
 
 ```bash
 git push
-stare gh run view
+stare
 ```
 
 Expo EAS Build:
 
 ```bash
-stare eas build view <build-id-or-url>
+stare eas <build-id-or-url>
 ```
 
 ## Usage
@@ -70,38 +70,42 @@ stare eas build view <build-id-or-url>
 ### GitHub Actions
 
 ```bash
-stare gh auth login
-stare gh run view
-stare gh run view <commit-sha>
-stare gh run view <actions-url>
-stare gh run view --run-id <run-id>
+stare
+stare gh
+stare gh <commit-sha>
+stare gh <actions-url>
+stare gh --run-id <run-id>
+stare gh --run-id <run-id> --run-id <run-id>
+stare gh --login
 ```
 
-`stare gh run view` defaults to the current repo and the latest eligible run for each workflow on `HEAD`.
+`stare` defaults to `stare gh`, and `stare gh` defaults to the current repo and the latest eligible run for each workflow on `HEAD`.
 
 Common cases:
 
 - no argument: watch the latest eligible runs for the current `HEAD`
 - commit SHA: watch the matching runs for that commit
 - Actions URL or `--run-id`: watch a specific run directly
+- repeated `--run-id`: watch multiple explicit runs together
 
 For authentication:
 
-- `stare gh run view` can open a browser automatically if the saved GitHub browser session is missing or expired
-- `stare gh auth login` is available if you want to create or refresh that browser session ahead of time
+- `stare` / `stare gh` can open a browser automatically if the saved GitHub browser session is missing or expired
+- `stare gh --login` is available if you want to create or refresh that browser session ahead of time
 - use `GITHUB_TOKEN`, `--token`, or `gh auth login` for GitHub API access
 
 Example:
 
 ```bash
-stare gh run view --run-id 123456789 --repo owner/repo
+stare gh --run-id 123456789 --repo owner/repo
 ```
 
 ### Expo EAS Build
 
 ```bash
-stare eas build view <build-id>
-stare eas build view <expo-build-url>
+stare eas <build-id>
+stare eas <expo-build-url>
+stare eas <build-id-or-url> <build-id-or-url>
 ```
 
 `stare` reads Expo auth from `~/.expo/state.json`, so log in first with `eas login`.
@@ -109,7 +113,7 @@ stare eas build view <expo-build-url>
 Example:
 
 ```bash
-stare eas build view 11111111-2222-4333-8444-555555555555
+stare eas 11111111-2222-4333-8444-555555555555
 ```
 
 ## Output model

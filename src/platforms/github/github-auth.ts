@@ -23,41 +23,53 @@ export async function createGitHubBrowserSession(
   output: OutputSink,
 ): Promise<GitHubBrowserSession> {
   const hasPersistedState = await hasStorageState(options.storageStatePath);
-  const launchHeaded =
-    options.headed || (options.allowInteractiveLogin === true && !hasPersistedState);
-  const storageState = hasPersistedState
-    ? options.storageStatePath
-    : undefined;
+  if (hasPersistedState) {
+    const authenticated = await hasAuthenticatedStorageState(options);
+    if (!authenticated) {
+      if (!options.allowInteractiveLogin) {
+        throw new GitHubAuthRequiredError(
+          `GitHub browser session for live log streaming is missing or expired at ${options.storageStatePath}. Run \`stare gh --login\` in an interactive terminal to create or refresh it.`,
+        );
+      }
+
+      output.status(
+        `GitHub browser session for live log streaming is missing or expired. Opening a browser window to refresh ${options.storageStatePath}.`,
+      );
+      await refreshGitHubBrowserSession(options, output);
+    }
+  } else if (options.allowInteractiveLogin) {
+    output.status(
+      `GitHub browser session for live log streaming is missing or expired. Opening a browser window to refresh ${options.storageStatePath}.`,
+    );
+    await refreshGitHubBrowserSession(options, output);
+  } else {
+    throw new GitHubAuthRequiredError(
+      `GitHub browser session for live log streaming is missing or expired at ${options.storageStatePath}. Run \`stare gh --login\` in an interactive terminal to create or refresh it.`,
+    );
+  }
 
   const browser = await chromium.launch({
     channel: options.browserPath ? undefined : options.browserChannel,
     executablePath: options.browserPath,
-    headless: !launchHeaded,
+    headless: !options.headed,
   });
 
   const context = await browser.newContext({
-    storageState,
+    storageState: options.storageStatePath,
   });
 
   try {
-    await ensureAuthenticated(context, { ...options, headed: launchHeaded }, output);
-  } catch (error) {
-    if (
-      error instanceof GitHubAuthRequiredError &&
-      options.allowInteractiveLogin === true &&
-      !launchHeaded
-    ) {
-      await context.close();
-      await browser.close();
-      output.status(
-        `GitHub browser session for live log streaming is missing or expired. Opening a browser window to refresh ${options.storageStatePath}.`,
-      );
-      return createGitHubBrowserSession(
-        { ...options, headed: true, allowInteractiveLogin: false },
-        output,
-      );
+    const page = await context.newPage();
+    try {
+      if (!(await isAuthenticated(page))) {
+        throw new GitHubAuthRequiredError(
+          `GitHub browser session for live log streaming could not be restored from ${options.storageStatePath}. Run \`stare gh --login\` and try again.`,
+        );
+      }
+    } finally {
+      await page.close();
     }
-
+  } catch (error) {
     await context.close();
     await browser.close();
     throw error;
@@ -77,7 +89,7 @@ export async function loginToGitHub(
   options: Omit<GitHubBrowserOptions, "headed" | "allowInteractiveLogin">,
   output: OutputSink,
 ): Promise<void> {
-  const session = await createGitHubBrowserSession(
+  await refreshGitHubBrowserSession(
     {
       ...options,
       headed: true,
@@ -85,31 +97,24 @@ export async function loginToGitHub(
     },
     output,
   );
-
-  await session.close();
 }
 
-async function ensureAuthenticated(
-  context: BrowserContext,
+async function refreshGitHubBrowserSession(
   options: GitHubBrowserOptions,
   output: OutputSink,
 ): Promise<void> {
+  const browser = await chromium.launch({
+    channel: options.browserPath ? undefined : options.browserChannel,
+    executablePath: options.browserPath,
+    headless: false,
+  });
+  const context = await browser.newContext();
   const page = await context.newPage();
 
   try {
-    if (await isAuthenticated(page)) {
-      return;
-    }
-
     if (!options.allowInteractiveLogin) {
       throw new GitHubAuthRequiredError(
-        `GitHub browser session for live log streaming is missing or expired at ${options.storageStatePath}. Run \`stare gh auth login\` in an interactive terminal to create or refresh it.`,
-      );
-    }
-
-    if (!options.headed) {
-      throw new GitHubAuthRequiredError(
-        `GitHub browser session for live log streaming is missing or expired at ${options.storageStatePath}. Re-run with \`--headed\`, or run \`stare gh auth login\` first.`,
+        `GitHub browser session for live log streaming is missing or expired at ${options.storageStatePath}. Run \`stare gh --login\` in an interactive terminal to create or refresh it.`,
       );
     }
 
@@ -133,6 +138,28 @@ async function ensureAuthenticated(
     );
   } finally {
     await page.close();
+    await context.close();
+    await browser.close();
+  }
+}
+
+async function hasAuthenticatedStorageState(options: GitHubBrowserOptions): Promise<boolean> {
+  const browser = await chromium.launch({
+    channel: options.browserPath ? undefined : options.browserChannel,
+    executablePath: options.browserPath,
+    headless: true,
+  });
+  const context = await browser.newContext({
+    storageState: options.storageStatePath,
+  });
+  const page = await context.newPage();
+
+  try {
+    return await isAuthenticated(page);
+  } finally {
+    await page.close();
+    await context.close();
+    await browser.close();
   }
 }
 

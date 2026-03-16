@@ -7,10 +7,6 @@ Set Height 900
 Set TypingSpeed 40ms
 Set Padding 20
 
-Type "git push"
-Enter
-Sleep 3s
-
-Type "stare gh run view"
+Type "stare"
 Enter
 Sleep 25s
