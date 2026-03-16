@@ -18,6 +18,7 @@ interface GitHubRunViewOptions extends GitHubBrowserCommandOptions {
   repo?: string;
   token?: string;
   headed?: boolean;
+  login?: boolean;
   pollIntervalMs: number;
   attachTimeoutMs: number;
   idleShutdownMs: number;
@@ -29,93 +30,55 @@ export const githubPlatform: WatchPlatform = {
   name: "gh",
   description: "GitHub Actions tools.",
   register(program: Command) {
+    configureGitHubWatchCommand(program, {
+      root: true,
+      examples: [
+        "$ stare",
+        "$ stare 23115990238",
+        "$ stare 2ce6a27",
+        "$ stare --workflow debug.yml",
+        "$ stare https://github.com/owner/repo/actions/runs/23115990238",
+        "$ stare --login",
+      ],
+    });
+
     const gh = program
       .command("gh")
-      .description("GitHub Actions tools.")
-      .action(() => {
-        gh.help();
-      });
+      .description("View and follow GitHub Actions logs.");
 
-    const auth = gh
-      .command("auth")
-      .description("Authenticate browser access to GitHub.")
-      .action(() => {
-        auth.help();
-      });
+    configureGitHubWatchCommand(gh, {
+      examples: [
+        "$ stare gh",
+        "$ stare gh 23115990238",
+        "$ stare gh 2ce6a27",
+        "$ stare gh --workflow debug.yml",
+        "$ stare gh https://github.com/owner/repo/actions/runs/23115990238",
+        "$ stare gh --login",
+      ],
+    });
+  },
+};
 
-    auth
-      .command("login")
-      .description("Authenticate the GitHub browser session used for live log streaming.")
-      .option(
-        "--storage-state <path>",
-        "Path to the saved Playwright storage state",
-        process.env.STARE_GITHUB_STORAGE_STATE ?? DEFAULT_STORAGE_STATE,
-      )
-      .option(
-        "--browser-channel <channel>",
-        "Browser channel to launch with Playwright",
-        process.env.STARE_BROWSER_CHANNEL ?? "chrome",
-      )
-      .option(
-        "--browser-path <path>",
-        "Explicit browser executable path",
-        process.env.STARE_BROWSER_PATH,
-      )
-      .option(
-        "--login-timeout-ms <ms>",
-        "How long to wait for a manual GitHub login",
-        parseNumberOption,
-        180_000,
-      )
-      .addHelpText(
-        "after",
-        `
+function configureGitHubWatchCommand(
+  command: Command,
+  options: {
+    root?: boolean;
+    examples: readonly string[];
+  },
+): void {
+  command
+    .description(options.root ? "View and follow GitHub Actions logs." : command.description() ?? "")
+    .argument(
+      "[selector]",
+      "Run ID, commit SHA, or GitHub Actions URL. Omit to use the latest eligible runs for the current HEAD commit.",
+    );
+
+  addRunViewOptions(command)
+    .addHelpText(
+      "after",
+      `
 Examples:
-  $ stare gh auth login
-  $ stare gh auth login --storage-state ~/.stare/github/storage-state.json
-`,
-      )
-      .action(async (options: GitHubBrowserCommandOptions) => {
-        ensureInteractiveTerminal(
-          "GitHub browser login requires an interactive terminal. Run `stare gh auth login` from an interactive shell.",
-        );
-
-        await loginToGitHub(
-          {
-            storageStatePath: expandHomeDirectory(options.storageState),
-            browserChannel: options.browserChannel,
-            browserPath: options.browserPath,
-            loginTimeoutMs: options.loginTimeoutMs,
-          },
-          new TerminalOutput(),
-        );
-      });
-
-    const run = gh
-      .command("run")
-      .description("View and follow GitHub Actions runs.")
-      .action(() => {
-        run.help();
-      });
-
-    const view = run
-      .command("view")
-      .description("View and follow GitHub Actions logs for a workflow run.")
-      .argument(
-        "[selector]",
-        "Run ID, commit SHA, or GitHub Actions URL. Omit to use the latest eligible runs for the current HEAD commit.",
-      );
-
-    addRunViewOptions(view)
-      .addHelpText(
-        "after",
-        `
-Examples:
-  $ stare gh run view
-  $ stare gh run view 23115990238
-  $ stare gh run view 2ce6a27
-  $ stare gh run view --workflow debug.yml
-  $ stare gh run view https://github.com/owner/repo/actions/runs/23115990238
+  ${options.examples.join("\n  ")}
 
 Selection rules:
   - No selector: use the latest eligible run for each workflow on the current HEAD commit.
@@ -124,22 +87,43 @@ Selection rules:
   - --workflow: use the latest run for that workflow, scoped to the current branch when possible.
   - Without --workflow, matching workflows stream together.
 `,
-      )
-      .action(async (selector: string | undefined, options: GitHubRunViewOptions) => {
-        await watchGitHub(
-          {
-            selector,
-            repo: options.repo,
-            runId: options.runId.length > 0 ? options.runId : undefined,
-            token: options.token,
-            workflow: options.workflow,
-          },
-          options,
+    )
+    .action(async (selector: string | undefined, commandOptions: GitHubRunViewOptions) => {
+      if (commandOptions.login) {
+        ensureInteractiveTerminal(
+          "GitHub browser login requires an interactive terminal. Run `stare gh --login` from an interactive shell.",
         );
-      });
 
-  },
-};
+        if (selector || commandOptions.runId.length > 0 || commandOptions.workflow) {
+          throw new Error(
+            "Received --login together with a run selector. Use --login by itself to refresh the GitHub browser session.",
+          );
+        }
+
+        await loginToGitHub(
+          {
+            storageStatePath: expandHomeDirectory(commandOptions.storageState),
+            browserChannel: commandOptions.browserChannel,
+            browserPath: commandOptions.browserPath,
+            loginTimeoutMs: commandOptions.loginTimeoutMs,
+          },
+          new TerminalOutput(),
+        );
+        return;
+      }
+
+      await watchGitHub(
+        {
+          selector,
+          repo: commandOptions.repo,
+          runId: commandOptions.runId.length > 0 ? commandOptions.runId : undefined,
+          token: commandOptions.token,
+          workflow: commandOptions.workflow,
+        },
+        commandOptions,
+      );
+    });
+}
 
 function addRunViewOptions(command: Command): Command {
   return command
@@ -149,6 +133,7 @@ function addRunViewOptions(command: Command): Command {
       "--workflow <workflow>",
       "Workflow name, file name, or workflow path. Defaults to the current branch when possible.",
     )
+    .option("--login", "Create or refresh the GitHub browser session used for live log streaming")
     .option("--token <token>", "GitHub API token", process.env.GITHUB_TOKEN)
     .option(
       "--storage-state <path>",

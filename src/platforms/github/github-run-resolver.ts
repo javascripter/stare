@@ -112,7 +112,7 @@ export async function resolveGitHubRuns(
   } else {
     if (!sameRepoAsCwd) {
       throw new Error(
-        "stare gh run view without arguments needs the current GitHub repository and branch. Run this inside the target repo, or pass a run ID, commit SHA, GitHub Actions URL, --workflow, or --run-id.",
+        "stare gh without arguments needs the current GitHub repository and branch. Run this inside the target repo, or pass a run ID, commit SHA, GitHub Actions URL, --workflow, or --run-id.",
       );
     }
 
@@ -120,7 +120,7 @@ export async function resolveGitHubRuns(
       headSha = gitContext.headSha;
     } else {
       throw new Error(
-        "stare gh run view without arguments needs the current HEAD commit. Check out the target commit or branch, or pass a run ID, commit SHA, GitHub Actions URL, --workflow, or --run-id.",
+        "stare gh without arguments needs the current HEAD commit. Check out the target commit or branch, or pass a run ID, commit SHA, GitHub Actions URL, --workflow, or --run-id.",
       );
     }
   }

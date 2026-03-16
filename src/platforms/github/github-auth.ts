@@ -28,7 +28,7 @@ export async function createGitHubBrowserSession(
     if (!authenticated) {
       if (!options.allowInteractiveLogin) {
         throw new GitHubAuthRequiredError(
-          `GitHub browser session for live log streaming is missing or expired at ${options.storageStatePath}. Run \`stare gh auth login\` in an interactive terminal to create or refresh it.`,
+          `GitHub browser session for live log streaming is missing or expired at ${options.storageStatePath}. Run \`stare gh --login\` in an interactive terminal to create or refresh it.`,
         );
       }
 
@@ -44,7 +44,7 @@ export async function createGitHubBrowserSession(
     await refreshGitHubBrowserSession(options, output);
   } else {
     throw new GitHubAuthRequiredError(
-      `GitHub browser session for live log streaming is missing or expired at ${options.storageStatePath}. Run \`stare gh auth login\` in an interactive terminal to create or refresh it.`,
+      `GitHub browser session for live log streaming is missing or expired at ${options.storageStatePath}. Run \`stare gh --login\` in an interactive terminal to create or refresh it.`,
     );
   }
 
@@ -63,7 +63,7 @@ export async function createGitHubBrowserSession(
     try {
       if (!(await isAuthenticated(page))) {
         throw new GitHubAuthRequiredError(
-          `GitHub browser session for live log streaming could not be restored from ${options.storageStatePath}. Run \`stare gh auth login\` and try again.`,
+          `GitHub browser session for live log streaming could not be restored from ${options.storageStatePath}. Run \`stare gh --login\` and try again.`,
         );
       }
     } finally {
@@ -114,7 +114,7 @@ async function refreshGitHubBrowserSession(
   try {
     if (!options.allowInteractiveLogin) {
       throw new GitHubAuthRequiredError(
-        `GitHub browser session for live log streaming is missing or expired at ${options.storageStatePath}. Run \`stare gh auth login\` in an interactive terminal to create or refresh it.`,
+        `GitHub browser session for live log streaming is missing or expired at ${options.storageStatePath}. Run \`stare gh --login\` in an interactive terminal to create or refresh it.`,
       );
     }
 
