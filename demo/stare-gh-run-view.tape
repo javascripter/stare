@@ -7,11 +7,6 @@ Set Height 900
 Set TypingSpeed 40ms
 Set Padding 20
 
-Hide
-Type "cd /Users/tsubasa/Projects/github.com/javascripter/stare"
-Enter
-Show
-
 Type "git push"
 Enter
 Sleep 3s
