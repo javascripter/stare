@@ -1,11 +1,26 @@
 # stare
 
-`stare` is a CLI for following remote CI and build logs in real time.
+`stare` is a CLI to stream remote CI and build logs in real time.
 
-Today it supports:
+Supported platforms:
 
 - GitHub Actions
 - Expo EAS Build
+
+## Example
+
+```bash
+git push
+stare gh run view
+```
+
+```text
+[test] npm test
+[test] 12 test files, 36 tests passed
+[test] ✓
+[stare] Summary: 1 job
+[stare] ✓ test 16s
+```
 
 ## Why this exists
 
@@ -18,7 +33,7 @@ That means you often end up with this split workflow:
 
 `stare` is built for the opposite workflow.
 
-You can run it immediately after pushing a commit or starting a build, and logs stream into your terminal as the remote job runs. That makes CI output feel much closer to local execution, which is useful both for humans and for AI agents that need to read warnings, failures, and build output directly.
+Run it right after pushing a commit or starting a build and watch the remote logs stream directly into your terminal. That makes CI output feel much closer to local execution, which is useful both for humans and for AI agents that need to read warnings, failures, and build output directly.
 
 The goal is faster iteration: start the remote build, watch it locally, and react as soon as something goes wrong.
 
@@ -46,7 +61,7 @@ Requirements:
 GitHub Actions:
 
 ```bash
-stare gh auth login
+git push
 stare gh run view
 ```
 
@@ -125,7 +140,7 @@ This keeps the stream readable while still working well for plain terminal use a
 
 ## Architecture
 
-- GitHub uses the REST API for run and job metadata, then Playwright plus browser session state for live job log streaming
+- GitHub uses the REST API for run and job metadata, then Playwright with a persisted browser session for real-time log streaming
 - EAS uses Expo's GraphQL API for build metadata and tails signed JSONL log files exposed by the build
 
 ## Development
