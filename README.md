@@ -14,13 +14,7 @@ git push
 stare gh run view
 ```
 
-```text
-[test] npm test
-[test] 12 test files, 36 tests passed
-[test] ✓
-[stare] Summary: 1 job
-[stare] ✓ test 16s
-```
+![stare demo](demo/stare-gh-run-view.gif)
 
 ## Why this exists
 
@@ -93,13 +87,13 @@ Common cases:
 
 For authentication:
 
-- run `stare gh auth login` once to create the browser session used for live log streaming
+- `stare gh run view` can open a browser automatically if the saved GitHub browser session is missing or expired
+- `stare gh auth login` is available if you want to create or refresh that browser session ahead of time
 - use `GITHUB_TOKEN`, `--token`, or `gh auth login` for GitHub API access
 
 Example:
 
 ```bash
-stare gh auth login
 stare gh run view --run-id 123456789 --repo owner/repo
 ```
 
