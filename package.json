@@ -1,6 +1,6 @@
 {
   "name": "stare-cli",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Attach to CI builds and stream logs locally",
   "license": "MIT",
   "type": "module",
