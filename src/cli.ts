@@ -11,7 +11,7 @@ async function main(): Promise<void> {
     .name("stare")
     .description("Stare at remote build logs.")
     .addHelpCommand(false)
-    .version("0.1.0");
+    .version("0.1.5");
 
   registerPlatforms(program);
   await program.parseAsync(process.argv);
