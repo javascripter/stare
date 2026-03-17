@@ -283,6 +283,7 @@ async function maybePrintArchivedJobLogs(
   if (
     !snapshot.isRunCompleted ||
     state.job.status !== "completed" ||
+    state.job.conclusion === "skipped" ||
     state.archivedPrinted ||
     state.launchPromise ||
     !shouldBackfillArchivedLogs(state)

@@ -120,6 +120,28 @@ describe("watchGitHub", () => {
     expect(api.getJobLogs).not.toHaveBeenCalled();
     expect(output.statuses).toContain(`Attached to ${inProgressJob.name}.`);
   });
+
+  it("does not request archived logs for skipped jobs", async () => {
+    const run = buildRun();
+    const job = buildJob({ status: "completed", conclusion: "skipped" });
+    const api = {
+      getRun: vi.fn().mockResolvedValue({ ...run, status: "completed", conclusion: "success" }),
+      listJobs: vi.fn().mockResolvedValue([job]),
+      getJobLogs: vi.fn(),
+    };
+
+    resolverMocks.resolveGitHubRuns.mockResolvedValue({
+      api,
+      repo: "owner/repo",
+      runs: [{ ...run, status: "completed", conclusion: "success" }],
+    });
+
+    const output = createCapturedOutput();
+    await watchGitHub({}, defaultOptions(), output);
+
+    expect(api.getJobLogs).not.toHaveBeenCalled();
+    expect(output.statuses).not.toContain(`Archived logs were unavailable for ${job.name}.`);
+  });
 });
 
 function buildRun(overrides: Partial<Record<string, unknown>> = {}) {
